@@ -7,8 +7,11 @@ import logging
 import time
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
-from homeassistant.components.sensor import (SensorDeviceClass, SensorEntity,
-                                             SensorStateClass)
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -71,7 +74,10 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
 
     async def _async_fetch_initial_state(self) -> None:
         """Fetch the initial state from the device."""
-        ble_device = async_ble_device_from_address(self.hass, self._mac_address)
+        ble_device = async_ble_device_from_address(
+            self.hass,
+            self._mac_address,
+        )
         if not ble_device:
             _LOGGER.error("Could not find BLE device: %s", self._mac_address)
             self._state = {}
@@ -91,7 +97,10 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
                 if json_payload:
                     decoded = json_payload.decode("utf-8")
                     self._state = self._data.decrypt(decoded)
-                    _LOGGER.debug("Initial state fetched for sensor: %s", self._state)
+                    _LOGGER.debug(
+                        "Initial state fetched for sensor: %s",
+                        self._state,
+                    )
                     self.async_write_ha_state()
                 else:
                     self._state = {}
@@ -180,7 +189,9 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     ) -> None:
         """Initialize the current fan mode sensor."""
         super().__init__(data, mac_address)
-        self._attr_unique_id = f"microaireasytouch_{mac_address}_current_fan_mode"
+        self._attr_unique_id = (
+            f"microaireasytouch_{mac_address}_current_fan_mode"
+        )
 
     @property
     def native_value(self) -> str | None:
@@ -257,7 +268,9 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     ) -> None:
         """Initialize the raw info array sensor."""
         super().__init__(data, mac_address)
-        self._attr_unique_id = f"microaireasytouch_{mac_address}_raw_info_array"
+        self._attr_unique_id = (
+            f"microaireasytouch_{mac_address}_raw_info_array"
+        )
 
     @property
     def native_value(self) -> str | None:
