@@ -14,7 +14,7 @@ from .const import DOMAIN
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 from .services import async_register_services, async_unregister_services
 
-PLATFORMS: Final = [Platform.BUTTON, Platform.CLIMATE]
+PLATFORMS: Final = [Platform.BUTTON, Platform.CLIMATE, Platform.SENSOR]
 _LOGGER = logging.getLogger(__name__)
 
 

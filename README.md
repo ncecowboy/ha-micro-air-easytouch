@@ -8,15 +8,56 @@ Home Assistant Integration for the Micro-Air EasyTouch RV Thermostat
 This integration implements a Home Assistant climate entity for basic control of your Micro-Air EasyTouch RV thermostat:
 
 Core Features:
+- Climate entity for HVAC control (Heat, Cool, Auto, Dry, Fan Only)
 - Temperature monitoring via faceplate sensor
-- Basic HVAC modes (Heat, Cool, Auto, Dry)
 - Fan mode settings
 - Temperature setpoint controls
 
+Additional Sensors:
+- **Temperature Sensor**: Current faceplate temperature reading
+- **Current Mode**: Shows actual running mode (off, fan, cool, heat, etc.)
+- **Current Fan Mode**: Displays the active fan setting
+- **Serial Number**: Device serial number (diagnostic)
+- **Raw Info Array**: Complete device status array with detailed attributes (diagnostic)
+- **Parameters**: Device parameter array with interpreted values (diagnostic)
+
 Additional Features:
-- Device reboot functionality
-- Service to configure device location for the device to display the local weather
+- Device reboot button
+- Service to configure device location for local weather display
 - Service to query device for all available Bluetooth data (for troubleshooting and development)
+
+## Diagnostic Sensors
+
+The integration provides several diagnostic sensors that expose raw device data. These sensors are marked as diagnostic entities in Home Assistant and are hidden by default. They are useful for troubleshooting and understanding device behavior:
+
+### Raw Info Array Sensor
+This sensor shows the complete raw status array from the device as JSON. It includes detailed attributes that map each array index to its meaning:
+
+- `info_0_autoHeat_sp`: Auto mode heat setpoint
+- `info_1_autoCool_sp`: Auto mode cool setpoint
+- `info_2_cool_sp`: Cool mode setpoint
+- `info_3_heat_sp`: Heat mode setpoint
+- `info_4_dry_sp`: Dry mode setpoint
+- `info_5_dry_fan`: Dry mode fan setting
+- `info_6_fan_mode`: Fan-only mode setting
+- `info_7_cool_fan`: Cool mode fan setting
+- `info_8_unknown`: Unknown value
+- `info_9_auto_fan`: Auto mode fan setting
+- `info_10_mode_num`: Mode number
+- `info_11_heat_fan`: Heat mode fan setting
+- `info_12_temperature`: Current temperature
+- `info_13_unknown`: Unknown value
+- `info_14_unknown`: Unknown value
+- `info_15_current_mode`: Current operating mode
+
+### Parameters Sensor
+This sensor shows the device parameter array (PRM) with interpretation of known values:
+
+- `param_0`, `param_1`, etc.: Raw parameter values
+- `power_off_indicated`: True if parameter 7 is present (indicates power off state)
+- `power_on_indicated`: True if parameter 15 is present (indicates power on state)
+
+To view these diagnostic sensors in Home Assistant, go to **Settings** → **Devices & Services** → **Micro-Air EasyTouch** → your device, then click "Show disabled entities" or enable diagnostic entities in your dashboard.
 
 ## Troubleshooting: Query Device Bluetooth Data
 
