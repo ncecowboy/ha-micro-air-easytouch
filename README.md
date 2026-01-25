@@ -16,6 +16,85 @@ Core Features:
 Additional Features:
 - Device reboot functionality
 - Service to configure device location for the device to display the local weather
+- Service to query device for all available Bluetooth data (for troubleshooting and development)
+
+## Troubleshooting: Query Device Bluetooth Data
+
+The integration provides a `query_device` service that queries your thermostat for all available Bluetooth data and logs detailed information to help with troubleshooting or discovering additional capabilities.
+
+### How to Use the Query Device Service
+
+**Step 1: Enable Logging**
+
+The query service outputs detailed information to Home Assistant logs, but you need to configure logging first. Add the following to your `configuration.yaml`:
+
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.micro_air_easytouch: info
+```
+
+After adding this configuration, restart Home Assistant for the changes to take effect.
+
+**Step 2: Call the Service**
+
+1. Go to **Developer Tools** → **Services** in Home Assistant
+2. Select the service **Micro-Air EasyTouch: Query Device**
+3. In the service data, provide your thermostat's MAC address:
+   ```yaml
+   address: "AA:BB:CC:DD:EE:FF"
+   ```
+   (Replace with your actual thermostat's MAC address, which you can find in Settings → Devices & Services → Micro-Air EasyTouch → Device Info)
+4. Click **Call Service**
+
+**Step 3: View the Output**
+
+1. Go to **Settings** → **System** → **Logs**
+2. Look for entries starting with `custom_components.micro_air_easytouch.services`
+3. You should see detailed output including:
+   - Raw device JSON response
+   - Parsed data (temperature, modes, fan settings, etc.)
+   - Raw info array values with indices
+   - Device parameters (PRM)
+   - Available Bluetooth UUIDs
+
+**Example Output:**
+
+The logs will show structured information like:
+```
+=== Querying device AA:BB:CC:DD:EE:FF for all available data ===
+RAW DEVICE RESPONSE:
+  Full JSON: { ... }
+
+PARSED DATA:
+  facePlateTemperature: 72.5
+  mode_num: 2
+  fan_mode_num: 128
+  ...
+
+RAW INFO ARRAY (Z_sts['0']):
+  info[0] = 68
+  info[1] = 78
+  ...
+```
+
+### Common Issues
+
+**No output in logs:**
+- Verify you've added the logger configuration to `configuration.yaml`
+- Ensure you restarted Home Assistant after adding the logger configuration
+- Check that the MAC address matches your device exactly
+- Ensure the thermostat is powered on and within Bluetooth range
+
+**"No config entry found" error:**
+- Make sure the integration is properly configured in Settings → Devices & Services
+- Verify the MAC address format is correct (XX:XX:XX:XX:XX:XX with colons)
+
+**"Could not find BLE device" error:**
+- The thermostat may be out of Bluetooth range
+- Try power cycling the thermostat
+- Check if another device (like the manufacturer's mobile app) is currently connected to the thermostat
 
 Known Limitations:
 - The device responds slowly to commands - please wait a few seconds between actions
