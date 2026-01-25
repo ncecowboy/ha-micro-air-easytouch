@@ -1,19 +1,23 @@
 """Support for MicroAirEasyTouch buttons."""
+
 from __future__ import annotations
 
 import logging
 
+from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.bluetooth import async_ble_device_from_address
 
 from .const import DOMAIN
-from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData  # Corrected import
+from .micro_air_easytouch.parser import (
+    MicroAirEasyTouchBluetoothDeviceData,
+)  # Corrected import
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -26,10 +30,13 @@ async def async_setup_entry(
     assert mac_address is not None
     async_add_entities([MicroAirEasyTouchRebootButton(data, mac_address)])
 
+
 class MicroAirEasyTouchRebootButton(ButtonEntity):
     """Representation of a reboot button for MicroAirEasyTouch."""
 
-    def __init__(self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str) -> None:
+    def __init__(
+        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+    ) -> None:
         """Initialize the button."""
         self._data = data
         self._mac_address = mac_address
