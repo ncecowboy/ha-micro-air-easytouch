@@ -1,39 +1,36 @@
 """Support for MicroAirEasyTouch climate control."""
+
 from __future__ import annotations
 
 import logging
-import json
 import time
 from typing import Any
 
+from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.climate import (
     ClimateEntity,
     ClimateEntityFeature,
-    HVACMode,
     HVACAction,
+    HVACMode,
 )
-from homeassistant.const import (
-    ATTR_TEMPERATURE,
-    UnitOfTemperature,
-)
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.bluetooth import async_ble_device_from_address
 
 from .const import DOMAIN
-from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 from .micro_air_easytouch.const import (
-    UUIDS,
-    HA_MODE_TO_EASY_MODE,
     EASY_MODE_TO_HA_MODE,
-    FAN_MODES_FULL,
     FAN_MODES_FAN_ONLY,
     FAN_MODES_REVERSE,
+    HA_MODE_TO_EASY_MODE,
+    UUIDS,
 )
+from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -44,6 +41,7 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
     entity = MicroAirEasyTouchClimate(data, config_entry.unique_id)
     async_add_entities([entity])
+
 
 class MicroAirEasyTouchClimate(ClimateEntity):
     """Representation of MicroAirEasyTouch Climate."""
@@ -98,7 +96,9 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         "auto": [128],
     }
 
-    def __init__(self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str) -> None:
+    def __init__(
+        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+    ) -> None:
         """Initialize the climate."""
         self._data = data
         self._mac_address = mac_address
@@ -137,12 +137,19 @@ class MicroAirEasyTouchClimate(ClimateEntity):
             self._state = {}
             return
 
-        message = {"Type": "Get Status", "Zone": 0, "EM": self._data._email, "TM": int(time.time())}
+        message = {
+            "Type": "Get Status",
+            "Zone": 0,
+            "EM": self._data._email,
+            "TM": int(time.time()),
+        }
         try:
             if await self._data.send_command(self.hass, ble_device, message):
-                json_payload = await self._data._read_gatt_with_retry(self.hass, UUIDS["jsonReturn"], ble_device)
+                json_payload = await self._data._read_gatt_with_retry(
+                    self.hass, UUIDS["jsonReturn"], ble_device
+                )
                 if json_payload:
-                    self._state = self._data.decrypt(json_payload.decode('utf-8'))
+                    self._state = self._data.decrypt(json_payload.decode("utf-8"))
                     _LOGGER.debug("Initial state fetched: %s", self._state)
                     self.async_write_ha_state()
                 else:
@@ -233,6 +240,9 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         elif self.hvac_mode == HVACMode.AUTO:
             fan_mode_num = self._state.get("auto_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
+        elif self.hvac_mode == HVACMode.DRY:
+            fan_mode_num = self._state.get("dry_fan_mode_num", 128)
+            mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
         else:
             mode = "full auto"
         return self._FAN_MODE_MAP.get(mode, "auto")
@@ -266,7 +276,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
 
         if changes:
             message = {"Type": "Change", "Changes": changes}
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
@@ -285,7 +298,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                     "mode": mode,
                 },
             }
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode using standard Home Assistant names."""
@@ -304,8 +320,14 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 fan_value = 2
             else:
                 fan_value = 0
-            message = {"Type": "Change", "Changes": {"zone": 0, "fanOnly": fan_value}}
-            await self._data.send_command(self.hass, ble_device, message)
+            message = {
+                "Type": "Change",
+                "Changes": {"zone": 0, "fanOnly": fan_value},
+            }
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
         else:
             if fan_mode == "off":
                 fan_value = 0
@@ -324,8 +346,13 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 changes["heatFan"] = fan_value
             elif self.hvac_mode == HVACMode.AUTO:
                 changes["autoFan"] = fan_value
+            elif self.hvac_mode == HVACMode.DRY:
+                changes["dryFan"] = fan_value
             message = {"Type": "Change", "Changes": changes}
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_update(self) -> None:
         """Update the entity state manually if needed."""

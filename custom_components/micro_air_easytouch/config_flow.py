@@ -1,20 +1,23 @@
 """Config flow for MicroAirEasyTouch integration."""
+
 from __future__ import annotations
 
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.bluetooth import (
     BluetoothServiceInfoBleak,
     async_discovered_service_info,
 )
 from homeassistant.config_entries import ConfigFlow
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.data_entry_flow import FlowResult
 
-from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData  # Corrected import
 from .const import DOMAIN
+from .micro_air_easytouch.parser import (
+    MicroAirEasyTouchBluetoothDeviceData,
+)  # Corrected import
+
 
 class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for MicroAirEasyTouch."""
@@ -56,10 +59,12 @@ class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="password",
-            data_schema=vol.Schema({
-                vol.Required(CONF_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-            }),
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_USERNAME): str,
+                    vol.Required(CONF_PASSWORD): str,
+                }
+            ),
             errors=errors,
         )
 
@@ -79,15 +84,14 @@ class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
                     CONF_USERNAME: self._discovered_device._email,
                     CONF_PASSWORD: self._discovered_device._password,
                     CONF_ADDRESS: discovery_info.address,
-                }
+                },
             )
 
         self._set_confirm_only()
         placeholders = {"name": title}
         self.context["title_placeholders"] = placeholders
         return self.async_show_form(
-            step_id="bluetooth_confirm",
-            description_placeholders=placeholders
+            step_id="bluetooth_confirm", description_placeholders=placeholders
         )
 
     async def async_step_user(
