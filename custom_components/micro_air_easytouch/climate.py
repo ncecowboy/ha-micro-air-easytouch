@@ -7,12 +7,9 @@ import time
 from typing import Any
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
-from homeassistant.components.climate import (
-    ClimateEntity,
-    ClimateEntityFeature,
-    HVACAction,
-    HVACMode,
-)
+from homeassistant.components.climate import (ClimateEntity,
+                                              ClimateEntityFeature, HVACAction,
+                                              HVACMode)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
@@ -20,13 +17,9 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN
-from .micro_air_easytouch.const import (
-    EASY_MODE_TO_HA_MODE,
-    FAN_MODES_FAN_ONLY,
-    FAN_MODES_REVERSE,
-    HA_MODE_TO_EASY_MODE,
-    UUIDS,
-)
+from .micro_air_easytouch.const import (EASY_MODE_TO_HA_MODE,
+                                        FAN_MODES_FAN_ONLY, FAN_MODES_REVERSE,
+                                        HA_MODE_TO_EASY_MODE, UUIDS)
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
@@ -54,7 +47,7 @@ class MicroAirEasyTouchClimate(ClimateEntity):
     )
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_hvac_modes = list(HA_MODE_TO_EASY_MODE.keys())
-    _attr_should_poll = True
+    _attr_should_poll = False
 
     # Map our modes to Home Assistant fan icons
     _FAN_MODE_ICONS = {
@@ -111,6 +104,12 @@ class MicroAirEasyTouchClimate(ClimateEntity):
             model="Thermostat",
         )
         self._state = {}
+
+    async def async_added_to_hass(self) -> None:
+        """Handle entity added to hass."""
+        await super().async_added_to_hass()
+        # Schedule initial state fetch in background to avoid blocking startup
+        self.hass.async_create_task(self._async_fetch_initial_state())
 
     @property
     def icon(self) -> str:
