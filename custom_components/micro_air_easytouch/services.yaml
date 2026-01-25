@@ -29,3 +29,15 @@ set_location:
           min: -180.0
           max: 180.0
           mode: box
+
+query_device:
+  name: Query Device
+  description: Query the thermostat for all available Bluetooth data and log detailed information to help discover additional commands, sensors, or values.
+  fields:
+    address:
+      name: MAC Address
+      description: The Bluetooth MAC address of the thermostat (e.g., 00:11:22:33:44:55).
+      required: true
+      example: "00:11:22:33:44:55"
+      selector:
+        text:
