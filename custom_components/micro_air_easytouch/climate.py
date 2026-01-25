@@ -276,7 +276,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
 
         if changes:
             message = {"Type": "Change", "Changes": changes}
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
@@ -295,7 +298,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                     "mode": mode,
                 },
             }
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode using standard Home Assistant names."""
@@ -318,7 +324,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 "Type": "Change",
                 "Changes": {"zone": 0, "fanOnly": fan_value},
             }
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
         else:
             if fan_mode == "off":
                 fan_value = 0
@@ -340,7 +349,10 @@ class MicroAirEasyTouchClimate(ClimateEntity):
             elif self.hvac_mode == HVACMode.DRY:
                 changes["dryFan"] = fan_value
             message = {"Type": "Change", "Changes": changes}
-            await self._data.send_command(self.hass, ble_device, message)
+            if await self._data.send_command(self.hass, ble_device, message):
+                # Refresh state after successful command
+                await self.async_update()
+                self.async_write_ha_state()
 
     async def async_update(self) -> None:
         """Update the entity state manually if needed."""
