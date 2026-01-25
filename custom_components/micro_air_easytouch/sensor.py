@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 
@@ -271,8 +272,6 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
         """Return the raw info array as JSON."""
         all_data = self._state.get("ALL")
         if all_data and "Z_sts" in all_data and "0" in all_data["Z_sts"]:
-            import json
-
             return json.dumps(all_data["Z_sts"]["0"])
         return None
 
@@ -326,8 +325,6 @@ class MicroAirEasyTouchParametersSensor(MicroAirEasyTouchSensorBase):
         """Return the parameters as JSON."""
         all_data = self._state.get("ALL")
         if all_data and "PRM" in all_data:
-            import json
-
             return json.dumps(all_data["PRM"])
         return None
 
