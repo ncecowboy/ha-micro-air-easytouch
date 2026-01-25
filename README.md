@@ -40,10 +40,10 @@ After adding this configuration, restart Home Assistant for the changes to take 
 **Step 2: Call the Service**
 
 1. Go to **Developer Tools** → **Services** in Home Assistant
-2. Select the service `Micro-Air EasyTouch: Query Device`
+2. Select the service **Micro-Air EasyTouch: Query Device**
 3. In the service data, provide your thermostat's MAC address:
    ```yaml
-   address: "00:11:22:33:44:55"
+   address: "AA:BB:CC:DD:EE:FF"
    ```
    (Replace with your actual thermostat's MAC address, which you can find in Settings → Devices & Services → Micro-Air EasyTouch → Device Info)
 4. Click **Call Service**
@@ -63,7 +63,7 @@ After adding this configuration, restart Home Assistant for the changes to take 
 
 The logs will show structured information like:
 ```
-=== Querying device 00:11:22:33:44:55 for all available data ===
+=== Querying device AA:BB:CC:DD:EE:FF for all available data ===
 RAW DEVICE RESPONSE:
   Full JSON: { ... }
 
@@ -84,7 +84,7 @@ RAW INFO ARRAY (Z_sts['0']):
 **No output in logs:**
 - Verify you've added the logger configuration to `configuration.yaml`
 - Ensure you restarted Home Assistant after adding the logger configuration
-- Check that the MAC address matches your device exactly (case-sensitive)
+- Check that the MAC address matches your device exactly
 - Ensure the thermostat is powered on and within Bluetooth range
 
 **"No config entry found" error:**
