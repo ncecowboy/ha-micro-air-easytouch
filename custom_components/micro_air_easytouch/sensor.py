@@ -26,7 +26,7 @@ from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 _LOGGER = logging.getLogger(__name__)
 
 # Default scan interval for sensors that have polling enabled
-# Currently only used by MicroAirEasyTouchTemperatureSensor
+# Used by temperature, current mode, and current fan mode sensors
 # Poll every 2 minutes to balance data freshness with BLE connection overhead
 SCAN_INTERVAL = timedelta(seconds=120)
 
@@ -217,6 +217,7 @@ class MicroAirEasyTouchCurrentModeSensor(MicroAirEasyTouchSensorBase):
     """Current mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
@@ -263,6 +264,7 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     """Current fan mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
