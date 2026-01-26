@@ -25,6 +25,8 @@ from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
 
+# Default scan interval for sensors that have polling enabled
+# Currently only used by MicroAirEasyTouchTemperatureSensor
 # Poll every 2 minutes to balance data freshness with BLE connection overhead
 SCAN_INTERVAL = timedelta(seconds=120)
 
