@@ -181,10 +181,29 @@ class MicroAirEasyTouchBluetoothDeviceData(BluetoothData):
         self.set_device_name(name)
         self.set_title(name)
 
-    def decrypt(self, data: bytes) -> dict:
-        """Parse and decode the device status data."""
+    def get_available_zones(self, data: bytes) -> list[int]:
+        """Discover available zones from device data."""
         status = json.loads(data)
-        info = status["Z_sts"]["0"]
+        zones = []
+        if "Z_sts" in status:
+            for zone_key in status["Z_sts"].keys():
+                try:
+                    zones.append(int(zone_key))
+                except (ValueError, TypeError):
+                    continue
+        return sorted(zones)
+
+    def decrypt(self, data: bytes, zone: int = 0) -> dict:
+        """Parse and decode the device status data for a specific zone."""
+        status = json.loads(data)
+        zone_key = str(zone)
+
+        # Check if the requested zone exists
+        if "Z_sts" not in status or zone_key not in status["Z_sts"]:
+            _LOGGER.warning("Zone %s not found in device data", zone_key)
+            return {}
+
+        info = status["Z_sts"][zone_key]
         param = status["PRM"]
         modes = {
             0: "off",
@@ -207,6 +226,7 @@ class MicroAirEasyTouchBluetoothDeviceData(BluetoothData):
         fan_modes_fan_only = {0: "off", 1: "low", 2: "high"}
         hr_status = {}
         hr_status["SN"] = status["SN"]
+        hr_status["zone"] = zone
         hr_status["autoHeat_sp"] = info[0]
         hr_status["autoCool_sp"] = info[1]
         hr_status["cool_sp"] = info[2]
