@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
@@ -31,6 +32,10 @@ from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
 
+# Poll every 2 minutes to keep temperature and state in sync with device
+# Matches sensor.py SCAN_INTERVAL for consistency
+SCAN_INTERVAL = timedelta(seconds=120)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -56,7 +61,7 @@ class MicroAirEasyTouchClimate(ClimateEntity):
     )
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_hvac_modes = list(HA_MODE_TO_EASY_MODE.keys())
-    _attr_should_poll = False
+    _attr_should_poll = True  # Enable polling to keep temperature updated
 
     # Map our modes to Home Assistant fan icons
     _FAN_MODE_ICONS = {
