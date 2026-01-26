@@ -3,6 +3,24 @@
 ## Summary
 Yes, there is evidence of zone control capabilities in the Micro-Air EasyTouch thermostat data structure!
 
+**UPDATE: Multi-zone support is now implemented!** The integration automatically detects and creates separate climate entities for each available zone.
+
+## Implementation Status
+
+### ✅ Completed Features
+- **Automatic zone discovery**: Integration queries device and detects all available zones
+- **Zone-specific climate entities**: Creates a separate climate entity for each zone
+- **Zone-specific sensors**: Temperature, mode, and fan sensors for each zone
+- **Zone-aware commands**: All control commands target the correct zone
+- **Backward compatibility**: Single-zone devices work exactly as before with zone 0
+
+### How It Works
+When you add the integration, it:
+1. Connects to your thermostat
+2. Queries the device for available zones in the `Z_sts` data structure
+3. Creates climate and sensor entities for each discovered zone
+4. Labels multi-zone entities clearly (e.g., "Zone 1 Climate", "Zone 2 Temperature")
+
 ## Key Findings
 
 ### 1. Zone Status Data Structure (`Z_sts`)
@@ -43,16 +61,109 @@ The `Z_sts` dictionary structure suggests it was designed to handle multiple zon
 ```
 
 ## Current Implementation
-The integration currently:
-- Only queries zone 0 data
-- Only sends commands to zone 0
-- Does not check for additional zones in the `Z_sts` object
-- Does not expose multiple zones as separate climate entities
+The integration now:
+- **Auto-discovers all zones** from the `Z_sts` object
+- **Queries each zone** independently
+- **Creates separate climate entities** for each zone
+- **Creates zone-specific sensors** (temperature, mode, fan)
+- **Sends zone-targeted commands** for all operations
+- **Falls back gracefully** to zone 0 if discovery fails
 
-## Potential Multi-Zone Support
+### Entity Naming
+- **Single-zone** (zone 0 only): "EasyTouch Climate", "Temperature", etc.
+- **Multi-zone**: "Zone 0 Climate", "Zone 1 Climate", "Zone 0 Temperature", "Zone 1 Temperature", etc.
 
-### To Investigate Further
-To determine if your specific thermostat supports multiple zones, you can use the existing `query_device` service:
+## Multi-Zone Support Details
+
+### Using Multi-Zone
+
+If your thermostat has multiple zones, they will appear automatically after adding the integration:
+
+**Climate Entities:**
+- `climate.easytouch_zone_0_climate` - Zone 0 climate control
+- `climate.easytouch_zone_1_climate` - Zone 1 climate control (if available)
+- `climate.easytouch_zone_2_climate` - Zone 2 climate control (if available)
+
+**Sensors (per zone):**
+- Temperature sensor
+- Current mode sensor
+- Current fan mode sensor
+
+**Device-Level Sensors** (shared, use zone 0 data):
+- Serial number
+- Raw info array
+- Parameters
+
+### Verification
+
+To verify zones detected in your setup:
+1. Add the integration in Home Assistant
+2. Go to Settings → Devices & Services → Micro-Air EasyTouch
+3. Click on your device
+4. Count the number of climate entities - one per zone
+
+Or check Home Assistant logs during setup:
+```
+INFO ... Discovered zones for device AA:BB:CC:DD:EE:FF: [0, 1, 2]
+```
+
+### Implementation Details
+
+**Parser Changes:**
+```python
+# New method to discover zones
+def get_available_zones(self, data: bytes) -> list[int]:
+    """Discover available zones from device data."""
+    status = json.loads(data)
+    zones = []
+    if "Z_sts" in status:
+        for zone_key in status["Z_sts"].keys():
+            zones.append(int(zone_key))
+    return sorted(zones)
+
+# Updated decrypt method accepts zone parameter
+def decrypt(self, data: bytes, zone: int = 0) -> dict:
+    """Parse and decode the device status data for a specific zone."""
+    zone_key = str(zone)
+    info = status["Z_sts"][zone_key]
+    # ... rest of parsing
+```
+
+**Climate Entity Changes:**
+- Added `zone` parameter to `__init__`
+- Zone-specific unique_id and naming
+- All commands use `self._zone` instead of hardcoded 0
+
+**Sensor Entity Changes:**
+- Added `zone` parameter to all sensor classes
+- Zone-specific entities for temperature/mode/fan
+- Device-level sensors use zone 0
+
+### Backward Compatibility
+
+Single-zone devices continue to work exactly as before:
+- Zone 0 is the default
+- Entity names unchanged for single-zone setups
+- No breaking changes to existing configurations
+
+## Hardware Capability
+The Micro-Air EasyTouch product line may have different models:
+- Single-zone models (most common in RVs)
+- Multi-zone models (for larger RVs or multiple AC units)
+
+The presence of zone-related data structures in the protocol suggests the firmware supports multi-zone configurations, even if not all hardware models utilize this capability.
+
+## Troubleshooting
+
+### No Multi-Zone Entities Appearing
+If you have a multi-zone thermostat but only see zone 0:
+1. Check Home Assistant logs for zone discovery messages
+2. Try removing and re-adding the integration
+3. Ensure your thermostat firmware supports multi-zone
+4. Use the `query_device` service to verify zone data in raw response
+
+### Manual Verification
+You can still manually check for zones using the `query_device` service:
 
 1. Enable logging in `configuration.yaml`:
 ```yaml
@@ -62,57 +173,25 @@ logger:
     custom_components.micro_air_easytouch: info
 ```
 
-2. Call the service in Developer Tools → Services:
+2. Call the service:
 ```yaml
 service: micro_air_easytouch.query_device
 data:
-  address: "AA:BB:CC:DD:EE:FF"  # Your thermostat MAC address
+  address: "AA:BB:CC:DD:EE:FF"
 ```
 
-3. Check the logs for the raw JSON response and look for additional zone keys in `Z_sts` (e.g., "1", "2", etc.)
-
-### Implementation Considerations for Multi-Zone
-If additional zones are detected, implementing multi-zone support would require:
-
-1. **Discovery**: Check the `Z_sts` object for all available zone keys
-2. **Entity Creation**: Create separate climate entities for each detected zone
-   - `climate.easytouch_zone_0`
-   - `climate.easytouch_zone_1`
-   - etc.
-3. **Zone-Specific Commands**: Modify all commands to target the specific zone
-4. **Zone Identification**: Add zone information to device info and entity names
-
-## Hardware Capability
-The Micro-Air EasyTouch product line may have different models:
-- Single-zone models (most common in RVs)
-- Multi-zone models (for larger RVs or multiple AC units)
-
-The presence of zone-related data structures in the protocol suggests the firmware supports multi-zone configurations, even if not all hardware models utilize this capability.
+3. Check logs for `Z_sts` structure - look for keys like "0", "1", "2"
 
 ## Recommendations
 
-1. **For Single-Zone Users**: No action needed - the current implementation works correctly
-2. **For Multi-Zone Users**: 
-   - Run the `query_device` service to check if zones 1, 2, etc. exist in your data
-   - Report findings to the integration maintainer
-   - Future enhancement could auto-detect and create entities for all available zones
+### For Single-Zone Users
+No action needed - integration works as before with zone 0 by default.
 
-## Example: How Multi-Zone Would Work
-```python
-# Future implementation concept
-async def discover_zones(status_data):
-    """Discover all available zones from Z_sts."""
-    zones = []
-    if "Z_sts" in status_data:
-        for zone_id in status_data["Z_sts"].keys():
-            zones.append(int(zone_id))
-    return sorted(zones)
-
-# Create one climate entity per zone
-for zone in available_zones:
-    entity = MicroAirEasyTouchClimate(data, mac_address, zone=zone)
-    entities.append(entity)
-```
+### For Multi-Zone Users
+- Zones are automatically detected and configured
+- Each zone gets independent climate and sensor entities
+- Control each zone separately through Home Assistant
+- Use automations to coordinate multi-zone HVAC control
 
 ## Conclusion
-**Yes, zone control data exists in the protocol!** The `Z_sts` structure and the `zone` parameter in all commands clearly indicate zone control capability. However, the current integration only supports zone 0. Multi-zone support could be added in a future version if users have hardware that provides multiple zones.
+**Multi-zone support is now fully implemented!** The integration automatically detects and creates climate/sensor entities for all available zones. The `Z_sts` structure and the `zone` parameter in all commands are now fully utilized. Single-zone devices continue to work exactly as before.

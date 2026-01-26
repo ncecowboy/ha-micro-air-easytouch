@@ -152,6 +152,12 @@ Currently supported change parameters:
 
 ### 7. Advanced Features Not Implemented
 
+**~~Multi-Zone Support~~**: ✅ **NOW IMPLEMENTED!**
+- Integration now auto-discovers all available zones
+- Creates separate climate and sensor entities for each zone
+- All commands are zone-aware
+- See ZONE_CONTROL_FINDINGS.md for details
+
 **Scheduling/Programming**:
 - The device may support programmable schedules (common in RV thermostats)
 - Wake/sleep schedules
@@ -222,13 +228,13 @@ Based on code analysis, the integration currently uses:
 - **16 of 16** info array values (3 marked as unknown)
 - **2 of many** PRM parameters
 - **3 of potentially many** top-level JSON keys
-- **1 of potentially multiple** zones
+- **✅ ALL zones automatically detected** - Multi-zone support implemented!
 - **2 command types** (Get Status, Change with limited parameters)
 
 The most significant gaps are:
 1. ⚠️ **Unknown info indices 8, 13, 14** - Could be important sensors
 2. ⚠️ **Most PRM parameters undocumented** - May include useful settings
-3. ⚠️ **Multi-zone not implemented** - Known limitation
+3. ~~⚠️ **Multi-zone not implemented**~~ - ✅ **NOW IMPLEMENTED!**
 4. ⚠️ **Potential additional JSON keys** - Need device query to discover
 5. ⚠️ **Limited change parameters** - Many common features may be missing
 6. ⚠️ **No scheduling support** - Common feature in thermostats
