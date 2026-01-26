@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import timedelta
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.sensor import (
@@ -23,6 +24,11 @@ from .micro_air_easytouch.const import UUIDS
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
+
+# Default scan interval for sensors that have polling enabled
+# Used by temperature, current mode, and current fan mode sensors
+# Poll every 2 minutes to balance data freshness with BLE connection overhead
+SCAN_INTERVAL = timedelta(seconds=120)
 
 
 async def async_setup_entry(
@@ -175,6 +181,7 @@ class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+    _attr_should_poll = True  # Enable polling for temperature updates
 
     def __init__(
         self,
@@ -210,6 +217,7 @@ class MicroAirEasyTouchCurrentModeSensor(MicroAirEasyTouchSensorBase):
     """Current mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
@@ -256,6 +264,7 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     """Current fan mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
