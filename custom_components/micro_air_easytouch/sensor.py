@@ -101,7 +101,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
     """Base class for MicroAirEasyTouch sensors."""
 
     _attr_has_entity_name = True
-    _attr_should_poll = True
+    _attr_should_poll = False
 
     def __init__(
         self,
@@ -179,6 +179,7 @@ class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
+    _attr_should_poll = True  # Enable polling for temperature updates
 
     def __init__(
         self,
