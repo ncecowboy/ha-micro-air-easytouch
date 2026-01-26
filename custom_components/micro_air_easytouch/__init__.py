@@ -29,7 +29,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"data": data}
 
     @callback
-    def _handle_bluetooth_update(service_info: BluetoothServiceInfoBleak) -> None:
+    def _handle_bluetooth_update(
+        service_info: BluetoothServiceInfoBleak,
+    ) -> None:
         """Update device info from advertisements."""
         if service_info.address == address:
             _LOGGER.debug(
@@ -48,7 +50,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+    if unload_ok := await hass.config_entries.async_unload_platforms(
+        entry, PLATFORMS
+    ):
         hass.data[DOMAIN].pop(entry.entry_id)
         # Unregister services
         await async_unregister_services(hass)

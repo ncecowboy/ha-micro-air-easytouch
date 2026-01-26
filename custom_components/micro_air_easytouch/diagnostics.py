@@ -61,16 +61,24 @@ async def async_get_config_entry_diagnostics(
     _LOGGER.info(
         "  - Temperature setpoints: autoHeat_sp, autoCool_sp, cool_sp, heat_sp, dry_sp"
     )
-    _LOGGER.info("  - Fan modes: fan_mode_num, cool_fan_mode_num, heat_fan_mode_num,")
+    _LOGGER.info(
+        "  - Fan modes: fan_mode_num, cool_fan_mode_num, heat_fan_mode_num,"
+    )
     _LOGGER.info("               auto_fan_mode_num, dry_fan_mode_num")
     _LOGGER.info("  - Modes: mode_num (setpoint), current_mode_num (actual)")
     _LOGGER.info("  - Temperature: facePlateTemperature")
     _LOGGER.info("  - Power state: param[7]=off, param[15]=on")
     _LOGGER.info("  - Raw info array indices:")
-    _LOGGER.info("      [0]=autoHeat_sp, [1]=autoCool_sp, [2]=cool_sp, [3]=heat_sp")
+    _LOGGER.info(
+        "      [0]=autoHeat_sp, [1]=autoCool_sp, [2]=cool_sp, [3]=heat_sp"
+    )
     _LOGGER.info("      [4]=dry_sp, [5]=dry_fan, [6]=fan_mode, [7]=cool_fan")
-    _LOGGER.info("      [8]=unknown, [9]=auto_fan, [10]=mode_num, [11]=heat_fan")
-    _LOGGER.info("      [12]=temperature, [13-14]=unknown, [15]=current_mode_num")
+    _LOGGER.info(
+        "      [8]=unknown, [9]=auto_fan, [10]=mode_num, [11]=heat_fan"
+    )
+    _LOGGER.info(
+        "      [12]=temperature, [13-14]=unknown, [15]=current_mode_num"
+    )
     _LOGGER.info("      [16+]=unknown (if present)")
     _LOGGER.info("=====================================")
 

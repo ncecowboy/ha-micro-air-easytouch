@@ -53,7 +53,8 @@ async def async_register_services(hass: HomeAssistant) -> None:
 
         if not config_entry:
             _LOGGER.error(
-                "No MicroAirEasyTouch config entry found for address %s", address
+                "No MicroAirEasyTouch config entry found for address %s",
+                address,
             )
             return
 
@@ -67,7 +68,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
         # Get BLE device
         ble_device = async_ble_device_from_address(hass, mac_address)
         if not ble_device:
-            _LOGGER.error("Could not find BLE device for address %s", mac_address)
+            _LOGGER.error(
+                "Could not find BLE device for address %s", mac_address
+            )
             return
 
         # Construct the command
@@ -95,7 +98,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
                 )
         except Exception as e:
             _LOGGER.error(
-                "Error sending location command to device %s: %s", mac_address, str(e)
+                "Error sending location command to device %s: %s",
+                mac_address,
+                str(e),
             )
 
     async def handle_query_device(call: ServiceCall) -> None:
@@ -111,7 +116,8 @@ async def async_register_services(hass: HomeAssistant) -> None:
 
         if not config_entry:
             _LOGGER.error(
-                "No MicroAirEasyTouch config entry found for address %s", address
+                "No MicroAirEasyTouch config entry found for address %s",
+                address,
             )
             return
 
@@ -125,7 +131,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
         # Get BLE device
         ble_device = async_ble_device_from_address(hass, mac_address)
         if not ble_device:
-            _LOGGER.error("Could not find BLE device for address %s", mac_address)
+            _LOGGER.error(
+                "Could not find BLE device for address %s", mac_address
+            )
             return
 
         # Query device status
@@ -137,7 +145,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
         }
 
         try:
-            _LOGGER.info("=== Querying device %s for all available data ===", address)
+            _LOGGER.info(
+                "=== Querying device %s for all available data ===", address
+            )
             if await device_data.send_command(hass, ble_device, command):
                 from .micro_air_easytouch.const import UUIDS
 
@@ -148,10 +158,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
                     import json
 
                     raw_data = json.loads(json_payload.decode("utf-8"))
-                    parsed_data = device_data.decrypt(json_payload.decode("utf-8"))
+                    parsed_data = device_data.decrypt(
+                        json_payload.decode("utf-8")
+                    )
 
                     _LOGGER.info("RAW DEVICE RESPONSE:")
-                    _LOGGER.info("  Full JSON: %s", json.dumps(raw_data, indent=2))
+                    _LOGGER.info(
+                        "  Full JSON: %s", json.dumps(raw_data, indent=2)
+                    )
                     _LOGGER.info("")
                     _LOGGER.info("PARSED DATA:")
                     for key, value in parsed_data.items():
@@ -174,7 +188,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
                     _LOGGER.info("  jsonCmd: %s", UUIDS["jsonCmd"])
                     _LOGGER.info("  jsonReturn: %s", UUIDS["jsonReturn"])
                     _LOGGER.info("  unknown: %s", UUIDS["unknown"])
-                    _LOGGER.info("==============================================")
+                    _LOGGER.info(
+                        "=============================================="
+                    )
                 else:
                     _LOGGER.error("No response received from device")
             else:

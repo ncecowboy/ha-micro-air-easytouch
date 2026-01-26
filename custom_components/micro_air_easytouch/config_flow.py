@@ -14,9 +14,9 @@ from homeassistant.const import CONF_ADDRESS, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import DOMAIN
-from .micro_air_easytouch.parser import (
+from .micro_air_easytouch.parser import (  # Corrected import
     MicroAirEasyTouchBluetoothDeviceData,
-)  # Corrected import
+)
 
 
 class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -27,7 +27,9 @@ class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize the config flow."""
         self._discovery_info: BluetoothServiceInfoBleak | None = None
-        self._discovered_device: MicroAirEasyTouchBluetoothDeviceData | None = None
+        self._discovered_device: (
+            MicroAirEasyTouchBluetoothDeviceData | None
+        ) = None
         self._discovered_devices: dict[str, str] = {}
 
     async def async_step_bluetooth(
@@ -36,7 +38,9 @@ class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
         """Handle the bluetooth discovery step."""
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
-        device = MicroAirEasyTouchBluetoothDeviceData(password=None, email=None)
+        device = MicroAirEasyTouchBluetoothDeviceData(
+            password=None, email=None
+        )
         if not device.supported(discovery_info):
             return self.async_abort(reason="not_supported")
         self._discovery_info = discovery_info
@@ -102,19 +106,26 @@ class MicroAirEasyTouchConfigFlow(ConfigFlow, domain=DOMAIN):
             address = user_input[CONF_ADDRESS]
             await self.async_set_unique_id(address, raise_on_progress=False)
             self._abort_if_unique_id_configured()
-            device = MicroAirEasyTouchBluetoothDeviceData(password=None, email=None)
+            device = MicroAirEasyTouchBluetoothDeviceData(
+                password=None, email=None
+            )
             self._discovered_device = device
             return await self.async_step_password()
 
         current_addresses = self._async_current_ids()
         for discovery_info in async_discovered_service_info(self.hass, False):
             address = discovery_info.address
-            if address in current_addresses or address in self._discovered_devices:
+            if (
+                address in current_addresses
+                or address in self._discovered_devices
+            ):
                 continue
             device = MicroAirEasyTouchBluetoothDeviceData(password=None)
             if device.supported(discovery_info):
                 self._discovered_devices[address] = (
-                    device.title or device.get_device_name() or discovery_info.name
+                    device.title
+                    or device.get_device_name()
+                    or discovery_info.name
                 )
 
         if not self._discovered_devices:
