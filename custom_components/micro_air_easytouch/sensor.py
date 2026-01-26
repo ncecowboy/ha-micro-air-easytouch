@@ -34,14 +34,61 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
     mac_address = config_entry.unique_id
 
-    entities = [
-        MicroAirEasyTouchTemperatureSensor(data, mac_address),
-        MicroAirEasyTouchCurrentModeSensor(data, mac_address),
-        MicroAirEasyTouchCurrentFanModeSensor(data, mac_address),
-        MicroAirEasyTouchSerialNumberSensor(data, mac_address),
-        MicroAirEasyTouchRawInfoArraySensor(data, mac_address),
-        MicroAirEasyTouchParametersSensor(data, mac_address),
-    ]
+    # Discover available zones by querying the device
+    entities = []
+    zones = [0]  # Default to zone 0
+
+    try:
+        from homeassistant.components.bluetooth import (
+            async_ble_device_from_address,
+        )
+
+        ble_device = async_ble_device_from_address(hass, mac_address)
+        if ble_device:
+            # Query device to discover zones
+            message = {
+                "Type": "Get Status",
+                "Zone": 0,
+                "EM": data._email,
+                "TM": int(time.time()),
+            }
+            if await data.send_command(hass, ble_device, message):
+                from .micro_air_easytouch.const import UUIDS
+
+                json_payload = await data._read_gatt_with_retry(
+                    hass, UUIDS["jsonReturn"], ble_device
+                )
+                if json_payload:
+                    zones = data.get_available_zones(json_payload)
+                    _LOGGER.info(
+                        "Discovered zones for sensors %s: %s",
+                        mac_address,
+                        zones,
+                    )
+    except Exception as e:
+        _LOGGER.error(
+            "Error discovering zones for sensors: %s, using default zone 0",
+            str(e),
+        )
+
+    # Create sensors for each zone
+    for zone in zones:
+        entities.extend(
+            [
+                MicroAirEasyTouchTemperatureSensor(data, mac_address, zone),
+                MicroAirEasyTouchCurrentModeSensor(data, mac_address, zone),
+                MicroAirEasyTouchCurrentFanModeSensor(data, mac_address, zone),
+            ]
+        )
+
+    # Serial number and raw data sensors are device-level, not zone-specific
+    entities.extend(
+        [
+            MicroAirEasyTouchSerialNumberSensor(data, mac_address, zone=0),
+            MicroAirEasyTouchRawInfoArraySensor(data, mac_address, zone=0),
+            MicroAirEasyTouchParametersSensor(data, mac_address, zone=0),
+        ]
+    )
 
     async_add_entities(entities)
 
@@ -53,11 +100,15 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
     _attr_should_poll = False
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the sensor."""
         self._data = data
         self._mac_address = mac_address
+        self._zone = zone
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"MicroAirEasyTouch_{mac_address}")},
             name=f"EasyTouch {mac_address}",
@@ -85,7 +136,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
 
         message = {
             "Type": "Get Status",
-            "Zone": 0,
+            "Zone": self._zone,
             "EM": self._data._email,
             "TM": int(time.time()),
         }
@@ -96,9 +147,10 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
                 )
                 if json_payload:
                     decoded = json_payload.decode("utf-8")
-                    self._state = self._data.decrypt(decoded)
+                    self._state = self._data.decrypt(decoded, zone=self._zone)
                     _LOGGER.debug(
-                        "Initial state fetched for sensor: %s",
+                        "Initial state fetched for sensor zone %s: %s",
+                        self._zone,
                         self._state,
                     )
                     self.async_write_ha_state()
@@ -123,14 +175,25 @@ class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-    _attr_name = "Temperature"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the temperature sensor."""
-        super().__init__(data, mac_address)
-        self._attr_unique_id = f"microaireasytouch_{mac_address}_temperature"
+        super().__init__(data, mac_address, zone)
+        if zone > 0:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_zone_{zone}_temperature"
+            )
+            self._attr_name = f"Zone {zone} Temperature"
+        else:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_temperature"
+            )
+            self._attr_name = "Temperature"
 
     @property
     def native_value(self) -> float | None:
@@ -147,14 +210,25 @@ class MicroAirEasyTouchCurrentModeSensor(MicroAirEasyTouchSensorBase):
     """Current mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Current Mode"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the current mode sensor."""
-        super().__init__(data, mac_address)
-        self._attr_unique_id = f"microaireasytouch_{mac_address}_current_mode"
+        super().__init__(data, mac_address, zone)
+        if zone > 0:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_zone_{zone}_current_mode"
+            )
+            self._attr_name = f"Zone {zone} Current Mode"
+        else:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_current_mode"
+            )
+            self._attr_name = "Current Mode"
 
     @property
     def native_value(self) -> str | None:
@@ -182,16 +256,25 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     """Current fan mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Current Fan Mode"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the current fan mode sensor."""
-        super().__init__(data, mac_address)
-        self._attr_unique_id = (
-            f"microaireasytouch_{mac_address}_current_fan_mode"
-        )
+        super().__init__(data, mac_address, zone)
+        if zone > 0:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_zone_{zone}_current_fan_mode"
+            )
+            self._attr_name = f"Zone {zone} Current Fan Mode"
+        else:
+            self._attr_unique_id = (
+                f"microaireasytouch_{mac_address}_current_fan_mode"
+            )
+            self._attr_name = "Current Fan Mode"
 
     @property
     def native_value(self) -> str | None:
@@ -239,10 +322,13 @@ class MicroAirEasyTouchSerialNumberSensor(MicroAirEasyTouchSensorBase):
     _attr_name = "Serial Number"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the serial number sensor."""
-        super().__init__(data, mac_address)
+        super().__init__(data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_serial_number"
 
     @property
@@ -264,10 +350,13 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     _attr_name = "Raw Info Array"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the raw info array sensor."""
-        super().__init__(data, mac_address)
+        super().__init__(data, mac_address, zone)
         self._attr_unique_id = (
             f"microaireasytouch_{mac_address}_raw_info_array"
         )
@@ -276,8 +365,9 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     def native_value(self) -> str | None:
         """Return the raw info array as JSON."""
         all_data = self._state.get("ALL")
-        if all_data and "Z_sts" in all_data and "0" in all_data["Z_sts"]:
-            return json.dumps(all_data["Z_sts"]["0"])
+        zone_key = str(self._zone)
+        if all_data and "Z_sts" in all_data and zone_key in all_data["Z_sts"]:
+            return json.dumps(all_data["Z_sts"][zone_key])
         return None
 
     @property
@@ -289,8 +379,9 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     def extra_state_attributes(self) -> dict:
         """Return extra attributes with parsed info array indices."""
         all_data = self._state.get("ALL")
-        if all_data and "Z_sts" in all_data and "0" in all_data["Z_sts"]:
-            info = all_data["Z_sts"]["0"]
+        zone_key = str(self._zone)
+        if all_data and "Z_sts" in all_data and zone_key in all_data["Z_sts"]:
+            info = all_data["Z_sts"][zone_key]
             return {
                 "info_0_autoHeat_sp": info[0] if len(info) > 0 else None,
                 "info_1_autoCool_sp": info[1] if len(info) > 1 else None,
@@ -319,10 +410,13 @@ class MicroAirEasyTouchParametersSensor(MicroAirEasyTouchSensorBase):
     _attr_name = "Parameters"
 
     def __init__(
-        self, data: MicroAirEasyTouchBluetoothDeviceData, mac_address: str
+        self,
+        data: MicroAirEasyTouchBluetoothDeviceData,
+        mac_address: str,
+        zone: int = 0,
     ) -> None:
         """Initialize the parameters sensor."""
-        super().__init__(data, mac_address)
+        super().__init__(data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_parameters"
 
     @property
