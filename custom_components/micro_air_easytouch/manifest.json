@@ -7,7 +7,7 @@
         "connectable": true
       }
   ],
-  "codeowners": ["@k3vmcd"],["@ncecowboy"]
+  "codeowners": ["@k3vmcd", "@ncecowboy"],
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
   "documentation": "https://github.com/ncecowboy/ha-micro-air-easytouch",
