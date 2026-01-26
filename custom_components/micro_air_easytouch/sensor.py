@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from datetime import timedelta
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.sensor import (
@@ -23,6 +24,9 @@ from .micro_air_easytouch.const import UUIDS
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
+
+# Poll every 2 minutes to balance data freshness with BLE connection overhead
+SCAN_INTERVAL = timedelta(seconds=120)
 
 
 async def async_setup_entry(
@@ -97,7 +101,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
     """Base class for MicroAirEasyTouch sensors."""
 
     _attr_has_entity_name = True
-    _attr_should_poll = False
+    _attr_should_poll = True
 
     def __init__(
         self,
