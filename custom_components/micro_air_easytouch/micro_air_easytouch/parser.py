@@ -181,18 +181,6 @@ class MicroAirEasyTouchBluetoothDeviceData(BluetoothData):
         self.set_device_name(name)
         self.set_title(name)
 
-    def get_available_zones(self, data: bytes) -> list[int]:
-        """Discover available zones from device data."""
-        status = json.loads(data)
-        zones = []
-        if "Z_sts" in status:
-            for zone_key in status["Z_sts"].keys():
-                try:
-                    zones.append(int(zone_key))
-                except (ValueError, TypeError):
-                    continue
-        return sorted(zones)
-
     def decrypt(self, data: bytes, zone: int = 0) -> dict:
         """Parse and decode the device status data for a specific zone."""
         status = json.loads(data)

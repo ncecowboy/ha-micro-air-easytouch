@@ -41,65 +41,8 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
     mac_address = config_entry.unique_id
 
-    # Discover available zones by querying the device
-    entities = []
-    try:
-        ble_device = async_ble_device_from_address(hass, mac_address)
-        if ble_device:
-            # Query device to discover zones
-            message = {
-                "Type": "Get Status",
-                "Zone": 0,
-                "EM": data._email,
-                "TM": int(time.time()),
-            }
-            if await data.send_command(hass, ble_device, message):
-                json_payload = await data._read_gatt_with_retry(
-                    hass, UUIDS["jsonReturn"], ble_device
-                )
-                if json_payload:
-                    zones = data.get_available_zones(json_payload)
-                    _LOGGER.info(
-                        "Discovered zones for device %s: %s",
-                        mac_address,
-                        zones,
-                    )
-
-                    # Create a climate entity for each zone
-                    for zone in zones:
-                        entity = MicroAirEasyTouchClimate(
-                            data, mac_address, zone=zone
-                        )
-                        entities.append(entity)
-                else:
-                    _LOGGER.warning(
-                        "No response from device, creating default zone 0 entity"
-                    )
-                    entities.append(
-                        MicroAirEasyTouchClimate(data, mac_address, zone=0)
-                    )
-            else:
-                _LOGGER.warning(
-                    "Failed to query device, creating default zone 0 entity"
-                )
-                entities.append(
-                    MicroAirEasyTouchClimate(data, mac_address, zone=0)
-                )
-        else:
-            _LOGGER.warning(
-                "BLE device not found, creating default zone 0 entity"
-            )
-            entities.append(
-                MicroAirEasyTouchClimate(data, mac_address, zone=0)
-            )
-    except Exception as e:
-        _LOGGER.error(
-            "Error discovering zones: %s, creating default zone 0 entity",
-            str(e),
-        )
-        entities.append(MicroAirEasyTouchClimate(data, mac_address, zone=0))
-
-    async_add_entities(entities)
+    # Create a single climate entity for zone 0
+    async_add_entities([MicroAirEasyTouchClimate(data, mac_address, zone=0)])
 
 
 class MicroAirEasyTouchClimate(ClimateEntity):
@@ -166,15 +109,9 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         self._mac_address = mac_address
         self._zone = zone
 
-        # If multi-zone, include zone in unique_id and name
-        if zone > 0:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_zone_{zone}_climate"
-            )
-            self._attr_name = f"Zone {zone} Climate"
-        else:
-            self._attr_unique_id = f"microaireasytouch_{mac_address}_climate"
-            self._attr_name = "EasyTouch Climate"
+        # Use simple naming without zone reference
+        self._attr_unique_id = f"microaireasytouch_{mac_address}_climate"
+        self._attr_name = "EasyTouch Climate"
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"MicroAirEasyTouch_{mac_address}")},

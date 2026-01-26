@@ -40,61 +40,15 @@ async def async_setup_entry(
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
     mac_address = config_entry.unique_id
 
-    # Discover available zones by querying the device
-    entities = []
-    zones = [0]  # Default to zone 0
-
-    try:
-        from homeassistant.components.bluetooth import (
-            async_ble_device_from_address,
-        )
-
-        ble_device = async_ble_device_from_address(hass, mac_address)
-        if ble_device:
-            # Query device to discover zones
-            message = {
-                "Type": "Get Status",
-                "Zone": 0,
-                "EM": data._email,
-                "TM": int(time.time()),
-            }
-            if await data.send_command(hass, ble_device, message):
-                from .micro_air_easytouch.const import UUIDS
-
-                json_payload = await data._read_gatt_with_retry(
-                    hass, UUIDS["jsonReturn"], ble_device
-                )
-                if json_payload:
-                    zones = data.get_available_zones(json_payload)
-                    _LOGGER.info(
-                        "Discovered zones for sensors %s: %s",
-                        mac_address,
-                        zones,
-                    )
-    except Exception as e:
-        _LOGGER.error(
-            "Error discovering zones for sensors: %s, using default zone 0",
-            str(e),
-        )
-
-    # Create sensors for each zone
-    for zone in zones:
-        entities.extend(
-            [
-                MicroAirEasyTouchTemperatureSensor(data, mac_address, zone),
-                MicroAirEasyTouchCurrentModeSensor(data, mac_address, zone),
-                MicroAirEasyTouchCurrentFanModeSensor(data, mac_address, zone),
-            ]
-        )
-
-    # Serial number and raw data sensors are device-level, not zone-specific
-    entities.extend(
-        [
-            MicroAirEasyTouchSerialNumberSensor(data, mac_address, zone=0),
-            MicroAirEasyTouchRawInfoArraySensor(data, mac_address, zone=0),
-            MicroAirEasyTouchParametersSensor(data, mac_address, zone=0),
-        ]
-    )
+    # Create sensors for zone 0 only
+    entities = [
+        MicroAirEasyTouchTemperatureSensor(data, mac_address, zone=0),
+        MicroAirEasyTouchCurrentModeSensor(data, mac_address, zone=0),
+        MicroAirEasyTouchCurrentFanModeSensor(data, mac_address, zone=0),
+        MicroAirEasyTouchSerialNumberSensor(data, mac_address, zone=0),
+        MicroAirEasyTouchRawInfoArraySensor(data, mac_address, zone=0),
+        MicroAirEasyTouchParametersSensor(data, mac_address, zone=0),
+    ]
 
     async_add_entities(entities)
 
@@ -191,16 +145,8 @@ class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
     ) -> None:
         """Initialize the temperature sensor."""
         super().__init__(data, mac_address, zone)
-        if zone > 0:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_zone_{zone}_temperature"
-            )
-            self._attr_name = f"Zone {zone} Temperature"
-        else:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_temperature"
-            )
-            self._attr_name = "Temperature"
+        self._attr_unique_id = f"microaireasytouch_{mac_address}_temperature"
+        self._attr_name = "Temperature"
 
     @property
     def native_value(self) -> float | None:
@@ -227,16 +173,8 @@ class MicroAirEasyTouchCurrentModeSensor(MicroAirEasyTouchSensorBase):
     ) -> None:
         """Initialize the current mode sensor."""
         super().__init__(data, mac_address, zone)
-        if zone > 0:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_zone_{zone}_current_mode"
-            )
-            self._attr_name = f"Zone {zone} Current Mode"
-        else:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_current_mode"
-            )
-            self._attr_name = "Current Mode"
+        self._attr_unique_id = f"microaireasytouch_{mac_address}_current_mode"
+        self._attr_name = "Current Mode"
 
     @property
     def native_value(self) -> str | None:
@@ -274,16 +212,10 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     ) -> None:
         """Initialize the current fan mode sensor."""
         super().__init__(data, mac_address, zone)
-        if zone > 0:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_zone_{zone}_current_fan_mode"
-            )
-            self._attr_name = f"Zone {zone} Current Fan Mode"
-        else:
-            self._attr_unique_id = (
-                f"microaireasytouch_{mac_address}_current_fan_mode"
-            )
-            self._attr_name = "Current Fan Mode"
+        self._attr_unique_id = (
+            f"microaireasytouch_{mac_address}_current_fan_mode"
+        )
+        self._attr_name = "Current Fan Mode"
 
     @property
     def native_value(self) -> str | None:

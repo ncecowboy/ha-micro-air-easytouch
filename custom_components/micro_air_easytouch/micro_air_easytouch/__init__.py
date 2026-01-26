@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from .parser import MicroAirEasyTouchBluetoothDeviceData, MicroAirEasyTouchSensor
+from .parser import (
+    MicroAirEasyTouchBluetoothDeviceData,
+    MicroAirEasyTouchSensor,
+)
 
 __all__ = [
     "MicroAirEasyTouchBluetoothDeviceData",
