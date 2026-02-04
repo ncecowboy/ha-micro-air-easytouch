@@ -2,6 +2,8 @@
 
 from homeassistant.components.climate import HVACMode
 
+DOMAIN = "micro_air_easytouch"
+
 UUIDS = {
     "service": "000000FF-0000-1000-8000-00805F9B34FB",  # ro
     "passwordCmd": "0000DD01-0000-1000-8000-00805F9B34FB",  # rw
