@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-import time
-from datetime import timedelta
 
-from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
@@ -18,18 +15,12 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-import homeassistant.util.dt as dt_util
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .micro_air_easytouch.const import UUIDS
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
-
-# Default scan interval for sensors that have polling enabled
-# Used by temperature, current mode, and current fan mode sensors
-# Poll every 2 minutes to balance data freshness with BLE connection overhead
-SCAN_INTERVAL = timedelta(seconds=120)
 
 
 async def async_setup_entry(
@@ -39,34 +30,48 @@ async def async_setup_entry(
 ) -> None:
     """Set up MicroAirEasyTouch sensor platform."""
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     mac_address = config_entry.unique_id
 
     # Create sensors for zone 0 only
     entities = [
-        MicroAirEasyTouchTemperatureSensor(data, mac_address, zone=0),
-        MicroAirEasyTouchCurrentModeSensor(data, mac_address, zone=0),
-        MicroAirEasyTouchCurrentFanModeSensor(data, mac_address, zone=0),
-        MicroAirEasyTouchSerialNumberSensor(data, mac_address, zone=0),
-        MicroAirEasyTouchRawInfoArraySensor(data, mac_address, zone=0),
-        MicroAirEasyTouchParametersSensor(data, mac_address, zone=0),
+        MicroAirEasyTouchTemperatureSensor(
+            coordinator, data, mac_address, zone=0
+        ),
+        MicroAirEasyTouchCurrentModeSensor(
+            coordinator, data, mac_address, zone=0
+        ),
+        MicroAirEasyTouchCurrentFanModeSensor(
+            coordinator, data, mac_address, zone=0
+        ),
+        MicroAirEasyTouchSerialNumberSensor(
+            coordinator, data, mac_address, zone=0
+        ),
+        MicroAirEasyTouchRawInfoArraySensor(
+            coordinator, data, mac_address, zone=0
+        ),
+        MicroAirEasyTouchParametersSensor(
+            coordinator, data, mac_address, zone=0
+        ),
     ]
 
     async_add_entities(entities)
 
 
-class MicroAirEasyTouchSensorBase(SensorEntity):
+class MicroAirEasyTouchSensorBase(CoordinatorEntity, SensorEntity):
     """Base class for MicroAirEasyTouch sensors."""
 
     _attr_has_entity_name = True
-    _attr_should_poll = False
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the sensor."""
+        super().__init__(coordinator)
         self._data = data
         self._mac_address = mac_address
         self._zone = zone
@@ -76,110 +81,6 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
             manufacturer="Micro-Air",
             model="Thermostat",
         )
-        self._state = {}
-        self._consecutive_failures = 0
-        self._attr_available = True
-        self._backoff_until = None
-
-    async def async_added_to_hass(self) -> None:
-        """Handle entity added to hass."""
-        await super().async_added_to_hass()
-        # Schedule initial state fetch in background to avoid blocking startup
-        self.hass.async_create_task(self._async_fetch_initial_state())
-
-    async def _async_fetch_initial_state(self) -> None:
-        """Fetch the initial state from the device."""
-        ble_device = async_ble_device_from_address(
-            self.hass,
-            self._mac_address,
-        )
-        if not ble_device:
-            _LOGGER.error("Could not find BLE device: %s", self._mac_address)
-            await self._handle_failure()
-            return
-
-        message = {
-            "Type": "Get Status",
-            "Zone": self._zone,
-            "EM": self._data._email,
-            "TM": int(time.time()),
-        }
-        try:
-            if await self._data.send_command(self.hass, ble_device, message):
-                json_payload = await self._data._read_gatt_with_retry(
-                    self.hass, UUIDS["jsonReturn"], ble_device
-                )
-                if json_payload:
-                    decoded = json_payload.decode("utf-8")
-                    new_state = self._data.decrypt(decoded, zone=self._zone)
-                    if new_state:  # Only update if we got valid data
-                        self._state = new_state
-                        self._consecutive_failures = 0
-                        self._attr_available = True
-                        self._backoff_until = None
-                        _LOGGER.debug(
-                            "State fetched successfully for sensor zone %s",
-                            self._zone,
-                        )
-                    self.async_write_ha_state()
-                else:
-                    _LOGGER.warning(
-                        "No payload received (attempt %d/3)",
-                        self._consecutive_failures + 1,
-                    )
-                    await self._handle_failure()
-            else:
-                _LOGGER.warning(
-                    "Failed to send command (attempt %d/3)",
-                    self._consecutive_failures + 1,
-                )
-                await self._handle_failure()
-        except Exception as e:
-            _LOGGER.error(
-                "Failed to fetch state (attempt %d/3): %s",
-                self._consecutive_failures + 1,
-                str(e),
-            )
-            await self._handle_failure()
-
-    async def _handle_failure(self) -> None:
-        """Handle a connection failure with exponential backoff."""
-        self._consecutive_failures += 1
-
-        # Mark unavailable after 3 consecutive failures
-        if self._consecutive_failures >= 3:
-            self._attr_available = False
-            self.async_write_ha_state()
-
-        # Implement exponential backoff: 2min, 4min, 8min, max 15min
-        backoff_seconds = min(
-            120 * (2 ** (self._consecutive_failures - 1)), 900
-        )
-        self._backoff_until = dt_util.utcnow() + timedelta(
-            seconds=backoff_seconds
-        )
-        _LOGGER.warning(
-            "Connection failed %d times, backing off for %d seconds "
-            "(until %s)",
-            self._consecutive_failures,
-            backoff_seconds,
-            self._backoff_until,
-        )
-
-    async def async_update(self) -> None:
-        """Update the entity state manually if needed."""
-        # Implement exponential backoff on repeated failures
-        if self._backoff_until is not None:
-            if dt_util.utcnow() < self._backoff_until:
-                _LOGGER.debug(
-                    "Skipping update due to backoff (until %s)",
-                    self._backoff_until,
-                )
-                return
-            # Backoff period expired, reset it
-            self._backoff_until = None
-
-        await self._async_fetch_initial_state()
 
 
 class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
@@ -188,23 +89,23 @@ class MicroAirEasyTouchTemperatureSensor(MicroAirEasyTouchSensorBase):
     _attr_device_class = SensorDeviceClass.TEMPERATURE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfTemperature.FAHRENHEIT
-    _attr_should_poll = True  # Enable polling for temperature updates
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the temperature sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_temperature"
         self._attr_name = "Temperature"
 
     @property
     def native_value(self) -> float | None:
         """Return the current temperature."""
-        return self._state.get("facePlateTemperature")
+        return self.coordinator.data.get("facePlateTemperature")
 
     @property
     def icon(self) -> str:
@@ -216,28 +117,28 @@ class MicroAirEasyTouchCurrentModeSensor(MicroAirEasyTouchSensorBase):
     """Current mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the current mode sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_current_mode"
         self._attr_name = "Current Mode"
 
     @property
     def native_value(self) -> str | None:
         """Return the current mode."""
-        return self._state.get("current_mode")
+        return self.coordinator.data.get("current_mode")
 
     @property
     def icon(self) -> str:
         """Return the icon based on current mode."""
-        mode = self._state.get("current_mode")
+        mode = self.coordinator.data.get("current_mode")
         mode_icons = {
             "off": "mdi:power-off",
             "fan": "mdi:fan",
@@ -255,16 +156,16 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     """Current fan mode sensor for MicroAirEasyTouch."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_should_poll = True  # Poll to detect physical device changes
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the current fan mode sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = (
             f"microaireasytouch_{mac_address}_current_fan_mode"
         )
@@ -273,7 +174,7 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
     @property
     def native_value(self) -> str | None:
         """Return the current fan mode based on current mode."""
-        current_mode = self._state.get("mode", "off")
+        current_mode = self.coordinator.data.get("mode", "off")
 
         # Map fan modes from parser
         fan_modes_full = {
@@ -287,19 +188,19 @@ class MicroAirEasyTouchCurrentFanModeSensor(MicroAirEasyTouchSensorBase):
         fan_modes_fan_only = {0: "off", 1: "low", 2: "high"}
 
         if current_mode == "fan":
-            fan_mode_num = self._state.get("fan_mode_num", 0)
+            fan_mode_num = self.coordinator.data.get("fan_mode_num", 0)
             return fan_modes_fan_only.get(fan_mode_num, "unknown")
         elif current_mode == "cool":
-            fan_mode_num = self._state.get("cool_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("cool_fan_mode_num", 128)
             return fan_modes_full.get(fan_mode_num, "unknown")
         elif current_mode == "heat":
-            fan_mode_num = self._state.get("heat_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("heat_fan_mode_num", 128)
             return fan_modes_full.get(fan_mode_num, "unknown")
         elif current_mode == "auto":
-            fan_mode_num = self._state.get("auto_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("auto_fan_mode_num", 128)
             return fan_modes_full.get(fan_mode_num, "unknown")
         elif current_mode == "dry":
-            fan_mode_num = self._state.get("dry_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("dry_fan_mode_num", 128)
             return fan_modes_full.get(fan_mode_num, "unknown")
         return "off"
 
@@ -317,18 +218,19 @@ class MicroAirEasyTouchSerialNumberSensor(MicroAirEasyTouchSensorBase):
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the serial number sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_serial_number"
 
     @property
     def native_value(self) -> str | None:
         """Return the serial number."""
-        sn = self._state.get("SN")
+        sn = self.coordinator.data.get("SN")
         return str(sn) if sn is not None else None
 
     @property
@@ -345,12 +247,13 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the raw info array sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = (
             f"microaireasytouch_{mac_address}_raw_info_array"
         )
@@ -358,7 +261,7 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     @property
     def native_value(self) -> str | None:
         """Return the raw info array as JSON."""
-        all_data = self._state.get("ALL")
+        all_data = self.coordinator.data.get("ALL")
         zone_key = str(self._zone)
         if all_data and "Z_sts" in all_data and zone_key in all_data["Z_sts"]:
             return json.dumps(all_data["Z_sts"][zone_key])
@@ -372,7 +275,7 @@ class MicroAirEasyTouchRawInfoArraySensor(MicroAirEasyTouchSensorBase):
     @property
     def extra_state_attributes(self) -> dict:
         """Return extra attributes with parsed info array indices."""
-        all_data = self._state.get("ALL")
+        all_data = self.coordinator.data.get("ALL")
         zone_key = str(self._zone)
         if all_data and "Z_sts" in all_data and zone_key in all_data["Z_sts"]:
             info = all_data["Z_sts"][zone_key]
@@ -405,18 +308,19 @@ class MicroAirEasyTouchParametersSensor(MicroAirEasyTouchSensorBase):
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the parameters sensor."""
-        super().__init__(data, mac_address, zone)
+        super().__init__(coordinator, data, mac_address, zone)
         self._attr_unique_id = f"microaireasytouch_{mac_address}_parameters"
 
     @property
     def native_value(self) -> str | None:
         """Return the parameters as JSON."""
-        all_data = self._state.get("ALL")
+        all_data = self.coordinator.data.get("ALL")
         if all_data and "PRM" in all_data:
             return json.dumps(all_data["PRM"])
         return None
@@ -429,7 +333,7 @@ class MicroAirEasyTouchParametersSensor(MicroAirEasyTouchSensorBase):
     @property
     def extra_state_attributes(self) -> dict:
         """Return extra attributes with parameter values."""
-        all_data = self._state.get("ALL")
+        all_data = self.coordinator.data.get("ALL")
         if all_data and "PRM" in all_data:
             prm = all_data["PRM"]
             attrs = {}
