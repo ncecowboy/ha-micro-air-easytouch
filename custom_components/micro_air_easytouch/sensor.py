@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.sensor import (
@@ -78,6 +78,8 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         self._state = {}
         self._consecutive_failures = 0
         self._attr_available = True
+        self._last_update_attempt = None
+        self._backoff_until = None
 
     async def async_added_to_hass(self) -> None:
         """Handle entity added to hass."""
@@ -93,11 +95,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         )
         if not ble_device:
             _LOGGER.error("Could not find BLE device: %s", self._mac_address)
-            self._consecutive_failures += 1
-            # Mark unavailable after 3 consecutive failures
-            if self._consecutive_failures >= 3:
-                self._attr_available = False
-                self.async_write_ha_state()
+            self._handle_failure()
             return
 
         message = {
@@ -118,45 +116,69 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
                         self._state = new_state
                         self._consecutive_failures = 0
                         self._attr_available = True
+                        self._backoff_until = None
                         _LOGGER.debug(
                             "State fetched successfully for sensor zone %s",
                             self._zone,
                         )
                     self.async_write_ha_state()
                 else:
-                    self._consecutive_failures += 1
                     _LOGGER.warning(
                         "No payload received (attempt %d/3)",
-                        self._consecutive_failures,
+                        self._consecutive_failures + 1,
                     )
-                    # Mark unavailable after 3 consecutive failures
-                    if self._consecutive_failures >= 3:
-                        self._attr_available = False
-                        self.async_write_ha_state()
+                    self._handle_failure()
             else:
-                self._consecutive_failures += 1
                 _LOGGER.warning(
                     "Failed to send command (attempt %d/3)",
-                    self._consecutive_failures,
+                    self._consecutive_failures + 1,
                 )
-                # Mark unavailable after 3 consecutive failures
-                if self._consecutive_failures >= 3:
-                    self._attr_available = False
-                    self.async_write_ha_state()
+                self._handle_failure()
         except Exception as e:
-            self._consecutive_failures += 1
             _LOGGER.error(
                 "Failed to fetch state (attempt %d/3): %s",
-                self._consecutive_failures,
+                self._consecutive_failures + 1,
                 str(e),
             )
-            # Mark unavailable after 3 consecutive failures
-            if self._consecutive_failures >= 3:
-                self._attr_available = False
-                self.async_write_ha_state()
+            self._handle_failure()
+
+    def _handle_failure(self) -> None:
+        """Handle a connection failure with exponential backoff."""
+        self._consecutive_failures += 1
+
+        # Mark unavailable after 3 consecutive failures
+        if self._consecutive_failures >= 3:
+            self._attr_available = False
+            self.async_write_ha_state()
+
+        # Implement exponential backoff: 2min, 4min, 8min, max 15min
+        backoff_seconds = min(
+            120 * (2 ** (self._consecutive_failures - 1)), 900
+        )
+        self._backoff_until = datetime.now() + timedelta(
+            seconds=backoff_seconds
+        )
+        _LOGGER.warning(
+            "Connection failed %d times, backing off for %d seconds "
+            "(until %s)",
+            self._consecutive_failures,
+            backoff_seconds,
+            self._backoff_until,
+        )
 
     async def async_update(self) -> None:
         """Update the entity state manually if needed."""
+        # Implement exponential backoff on repeated failures
+        if self._backoff_until is not None:
+            if datetime.now() < self._backoff_until:
+                _LOGGER.debug(
+                    "Skipping update due to backoff (until %s)",
+                    self._backoff_until,
+                )
+                return
+            # Backoff period expired, reset it
+            self._backoff_until = None
+
         await self._async_fetch_initial_state()
 
 
