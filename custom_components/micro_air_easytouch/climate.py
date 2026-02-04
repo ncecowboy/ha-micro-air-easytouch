@@ -125,6 +125,8 @@ class MicroAirEasyTouchClimate(ClimateEntity):
             model="Thermostat",
         )
         self._state = {}
+        self._consecutive_failures = 0
+        self._attr_available = True
 
     async def async_added_to_hass(self) -> None:
         """Handle entity added to hass."""
@@ -156,7 +158,11 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         )
         if not ble_device:
             _LOGGER.error("Could not find BLE device: %s", self._mac_address)
-            self._state = {}
+            self._consecutive_failures += 1
+            # Mark unavailable after 3 consecutive failures
+            if self._consecutive_failures >= 3:
+                self._attr_available = False
+                self.async_write_ha_state()
             return
 
         message = {
@@ -171,24 +177,49 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                     self.hass, UUIDS["jsonReturn"], ble_device
                 )
                 if json_payload:
-                    self._state = self._data.decrypt(
+                    new_state = self._data.decrypt(
                         json_payload.decode("utf-8"), zone=self._zone
                     )
-                    _LOGGER.debug(
-                        "Initial state fetched for zone %s: %s",
-                        self._zone,
-                        self._state,
-                    )
+                    if new_state:  # Only update if we got valid data
+                        self._state = new_state
+                        self._consecutive_failures = 0
+                        self._attr_available = True
+                        _LOGGER.debug(
+                            "State fetched successfully for climate zone %s",
+                            self._zone,
+                        )
                     self.async_write_ha_state()
                 else:
-                    self._state = {}
-                    _LOGGER.warning("No payload received for initial state")
+                    self._consecutive_failures += 1
+                    _LOGGER.warning(
+                        "No payload received (attempt %d/3)",
+                        self._consecutive_failures,
+                    )
+                    # Mark unavailable after 3 consecutive failures
+                    if self._consecutive_failures >= 3:
+                        self._attr_available = False
+                        self.async_write_ha_state()
             else:
-                self._state = {}
-                _LOGGER.warning("Failed to send command for initial state")
+                self._consecutive_failures += 1
+                _LOGGER.warning(
+                    "Failed to send command (attempt %d/3)",
+                    self._consecutive_failures,
+                )
+                # Mark unavailable after 3 consecutive failures
+                if self._consecutive_failures >= 3:
+                    self._attr_available = False
+                    self.async_write_ha_state()
         except Exception as e:
-            _LOGGER.error("Failed to fetch initial state: %s", str(e))
-            self._state = {}
+            self._consecutive_failures += 1
+            _LOGGER.error(
+                "Failed to fetch state (attempt %d/3): %s",
+                self._consecutive_failures,
+                str(e),
+            )
+            # Mark unavailable after 3 consecutive failures
+            if self._consecutive_failures >= 3:
+                self._attr_available = False
+                self.async_write_ha_state()
 
     @property
     def current_temperature(self) -> float | None:
