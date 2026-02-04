@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.components.sensor import (
@@ -18,6 +18,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt_util
 
 from .const import DOMAIN
 from .micro_air_easytouch.const import UUIDS
@@ -78,7 +79,6 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         self._state = {}
         self._consecutive_failures = 0
         self._attr_available = True
-        self._last_update_attempt = None
         self._backoff_until = None
 
     async def async_added_to_hass(self) -> None:
@@ -95,7 +95,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         )
         if not ble_device:
             _LOGGER.error("Could not find BLE device: %s", self._mac_address)
-            self._handle_failure()
+            await self._handle_failure()
             return
 
         message = {
@@ -127,22 +127,22 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
                         "No payload received (attempt %d/3)",
                         self._consecutive_failures + 1,
                     )
-                    self._handle_failure()
+                    await self._handle_failure()
             else:
                 _LOGGER.warning(
                     "Failed to send command (attempt %d/3)",
                     self._consecutive_failures + 1,
                 )
-                self._handle_failure()
+                await self._handle_failure()
         except Exception as e:
             _LOGGER.error(
                 "Failed to fetch state (attempt %d/3): %s",
                 self._consecutive_failures + 1,
                 str(e),
             )
-            self._handle_failure()
+            await self._handle_failure()
 
-    def _handle_failure(self) -> None:
+    async def _handle_failure(self) -> None:
         """Handle a connection failure with exponential backoff."""
         self._consecutive_failures += 1
 
@@ -155,7 +155,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         backoff_seconds = min(
             120 * (2 ** (self._consecutive_failures - 1)), 900
         )
-        self._backoff_until = datetime.now() + timedelta(
+        self._backoff_until = dt_util.utcnow() + timedelta(
             seconds=backoff_seconds
         )
         _LOGGER.warning(
@@ -170,7 +170,7 @@ class MicroAirEasyTouchSensorBase(SensorEntity):
         """Update the entity state manually if needed."""
         # Implement exponential backoff on repeated failures
         if self._backoff_until is not None:
-            if datetime.now() < self._backoff_until:
+            if dt_util.utcnow() < self._backoff_until:
                 _LOGGER.debug(
                     "Skipping update due to backoff (until %s)",
                     self._backoff_until,
