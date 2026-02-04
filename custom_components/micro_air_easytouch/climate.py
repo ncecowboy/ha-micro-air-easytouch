@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
-from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.bluetooth import async_ble_device_from_address
@@ -19,7 +17,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-import homeassistant.util.dt as dt_util
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .micro_air_easytouch.const import (
@@ -27,15 +25,10 @@ from .micro_air_easytouch.const import (
     FAN_MODES_FAN_ONLY,
     FAN_MODES_REVERSE,
     HA_MODE_TO_EASY_MODE,
-    UUIDS,
 )
 from .micro_air_easytouch.parser import MicroAirEasyTouchBluetoothDeviceData
 
 _LOGGER = logging.getLogger(__name__)
-
-# Poll every 2 minutes to keep temperature and state in sync with device
-# Matches sensor.py SCAN_INTERVAL for consistency
-SCAN_INTERVAL = timedelta(seconds=120)
 
 
 async def async_setup_entry(
@@ -45,13 +38,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up MicroAirEasyTouch climate platform."""
     data = hass.data[DOMAIN][config_entry.entry_id]["data"]
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     mac_address = config_entry.unique_id
 
     # Create a single climate entity for zone 0
-    async_add_entities([MicroAirEasyTouchClimate(data, mac_address, zone=0)])
+    async_add_entities(
+        [MicroAirEasyTouchClimate(coordinator, data, mac_address, zone=0)]
+    )
 
 
-class MicroAirEasyTouchClimate(ClimateEntity):
+class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
     """Representation of MicroAirEasyTouch Climate."""
 
     _attr_has_entity_name = True
@@ -62,7 +58,6 @@ class MicroAirEasyTouchClimate(ClimateEntity):
     )
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_hvac_modes = list(HA_MODE_TO_EASY_MODE.keys())
-    _attr_should_poll = True  # Enable polling to keep temperature updated
 
     # Map our modes to Home Assistant fan icons
     _FAN_MODE_ICONS = {
@@ -106,11 +101,13 @@ class MicroAirEasyTouchClimate(ClimateEntity):
 
     def __init__(
         self,
+        coordinator,
         data: MicroAirEasyTouchBluetoothDeviceData,
         mac_address: str,
         zone: int = 0,
     ) -> None:
         """Initialize the climate."""
+        super().__init__(coordinator)
         self._data = data
         self._mac_address = mac_address
         self._zone = zone
@@ -125,16 +122,6 @@ class MicroAirEasyTouchClimate(ClimateEntity):
             manufacturer="Micro-Air",
             model="Thermostat",
         )
-        self._state = {}
-        self._consecutive_failures = 0
-        self._attr_available = True
-        self._backoff_until = None
-
-    async def async_added_to_hass(self) -> None:
-        """Handle entity added to hass."""
-        await super().async_added_to_hass()
-        # Schedule initial state fetch in background to avoid blocking startup
-        self.hass.async_create_task(self._async_fetch_initial_state())
 
     @property
     def icon(self) -> str:
@@ -153,125 +140,46 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         """Return the icon to use for the current fan mode."""
         return self._FAN_MODE_ICONS.get(self.fan_mode, "mdi:fan")
 
-    async def _async_fetch_initial_state(self) -> None:
-        """Fetch the initial state from the device."""
-        ble_device = async_ble_device_from_address(
-            self.hass, self._mac_address
-        )
-        if not ble_device:
-            _LOGGER.error("Could not find BLE device: %s", self._mac_address)
-            await self._handle_failure()
-            return
-
-        message = {
-            "Type": "Get Status",
-            "Zone": self._zone,
-            "EM": self._data._email,
-            "TM": int(time.time()),
-        }
-        try:
-            if await self._data.send_command(self.hass, ble_device, message):
-                json_payload = await self._data._read_gatt_with_retry(
-                    self.hass, UUIDS["jsonReturn"], ble_device
-                )
-                if json_payload:
-                    new_state = self._data.decrypt(
-                        json_payload.decode("utf-8"), zone=self._zone
-                    )
-                    if new_state:  # Only update if we got valid data
-                        self._state = new_state
-                        self._consecutive_failures = 0
-                        self._attr_available = True
-                        self._backoff_until = None
-                        _LOGGER.debug(
-                            "State fetched successfully for climate zone %s",
-                            self._zone,
-                        )
-                    self.async_write_ha_state()
-                else:
-                    _LOGGER.warning(
-                        "No payload received (attempt %d/3)",
-                        self._consecutive_failures + 1,
-                    )
-                    await self._handle_failure()
-            else:
-                _LOGGER.warning(
-                    "Failed to send command (attempt %d/3)",
-                    self._consecutive_failures + 1,
-                )
-                await self._handle_failure()
-        except Exception as e:
-            _LOGGER.error(
-                "Failed to fetch state (attempt %d/3): %s",
-                self._consecutive_failures + 1,
-                str(e),
-            )
-            await self._handle_failure()
-
-    async def _handle_failure(self) -> None:
-        """Handle a connection failure with exponential backoff."""
-        self._consecutive_failures += 1
-
-        # Mark unavailable after 3 consecutive failures
-        if self._consecutive_failures >= 3:
-            self._attr_available = False
-            self.async_write_ha_state()
-
-        # Implement exponential backoff: 2min, 4min, 8min, max 15min
-        backoff_seconds = min(
-            120 * (2 ** (self._consecutive_failures - 1)), 900
-        )
-        self._backoff_until = dt_util.utcnow() + timedelta(
-            seconds=backoff_seconds
-        )
-        _LOGGER.warning(
-            "Connection failed %d times, backing off for %d seconds "
-            "(until %s)",
-            self._consecutive_failures,
-            backoff_seconds,
-            self._backoff_until,
-        )
-
     @property
     def current_temperature(self) -> float | None:
         """Return the current temperature."""
-        return self._state.get("facePlateTemperature")
+        return self.coordinator.data.get("facePlateTemperature")
 
     @property
     def target_temperature(self) -> float | None:
         """Return the target temperature."""
         if self.hvac_mode == HVACMode.COOL:
-            return self._state.get("cool_sp")
+            return self.coordinator.data.get("cool_sp")
         elif self.hvac_mode == HVACMode.HEAT:
-            return self._state.get("heat_sp")
+            return self.coordinator.data.get("heat_sp")
         elif self.hvac_mode == HVACMode.DRY:
-            return self._state.get("dry_sp")
+            return self.coordinator.data.get("dry_sp")
         return None
 
     @property
     def target_temperature_high(self) -> float | None:
         """Return the high target temperature."""
         if self.hvac_mode == HVACMode.AUTO:
-            return self._state.get("autoCool_sp")
+            return self.coordinator.data.get("autoCool_sp")
         return None
 
     @property
     def target_temperature_low(self) -> float | None:
         """Return the low target temperature."""
         if self.hvac_mode == HVACMode.AUTO:
-            return self._state.get("autoHeat_sp")
+            return self.coordinator.data.get("autoHeat_sp")
         return None
 
     @property
     def hvac_mode(self) -> HVACMode:
         """Return hvac operation mode."""
-        mode_num = self._state.get("mode_num", 0)
+        mode_num = self.coordinator.data.get("mode_num", 0)
         return EASY_MODE_TO_HA_MODE.get(mode_num, HVACMode.OFF)
 
     @property
     def hvac_action(self) -> HVACAction | None:
         """Return the current HVAC action."""
-        current_mode = self._state.get("current_mode")
+        current_mode = self.coordinator.data.get("current_mode")
         if self.hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
         elif current_mode == "fan":
@@ -303,19 +211,19 @@ class MicroAirEasyTouchClimate(ClimateEntity):
     def fan_mode(self) -> str | None:
         """Return the current fan mode as a standard Home Assistant name."""
         if self.hvac_mode == HVACMode.FAN_ONLY:
-            fan_mode_num = self._state.get("fan_mode_num", 0)
+            fan_mode_num = self.coordinator.data.get("fan_mode_num", 0)
             mode = FAN_MODES_FAN_ONLY.get(fan_mode_num, "off")
         elif self.hvac_mode == HVACMode.COOL:
-            fan_mode_num = self._state.get("cool_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("cool_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
         elif self.hvac_mode == HVACMode.HEAT:
-            fan_mode_num = self._state.get("heat_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("heat_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
         elif self.hvac_mode == HVACMode.AUTO:
-            fan_mode_num = self._state.get("auto_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("auto_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
         elif self.hvac_mode == HVACMode.DRY:
-            fan_mode_num = self._state.get("dry_fan_mode_num", 128)
+            fan_mode_num = self.coordinator.data.get("dry_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
         else:
             mode = "full auto"
@@ -353,9 +261,8 @@ class MicroAirEasyTouchClimate(ClimateEntity):
         if changes:
             message = {"Type": "Change", "Changes": changes}
             if await self._data.send_command(self.hass, ble_device, message):
-                # Refresh state after successful command
-                await self.async_update()
-                self.async_write_ha_state()
+                # Request coordinator refresh after successful command
+                await self.coordinator.async_request_refresh()
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""
@@ -377,9 +284,8 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 },
             }
             if await self._data.send_command(self.hass, ble_device, message):
-                # Refresh state after successful command
-                await self.async_update()
-                self.async_write_ha_state()
+                # Request coordinator refresh after successful command
+                await self.coordinator.async_request_refresh()
 
     async def async_set_fan_mode(self, fan_mode: str) -> None:
         """Set new target fan mode using standard Home Assistant names."""
@@ -405,9 +311,8 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 "Changes": {"zone": self._zone, "fanOnly": fan_value},
             }
             if await self._data.send_command(self.hass, ble_device, message):
-                # Refresh state after successful command
-                await self.async_update()
-                self.async_write_ha_state()
+                # Request coordinator refresh after successful command
+                await self.coordinator.async_request_refresh()
         else:
             if fan_mode == "off":
                 fan_value = 0
@@ -430,21 +335,5 @@ class MicroAirEasyTouchClimate(ClimateEntity):
                 changes["dryFan"] = fan_value
             message = {"Type": "Change", "Changes": changes}
             if await self._data.send_command(self.hass, ble_device, message):
-                # Refresh state after successful command
-                await self.async_update()
-                self.async_write_ha_state()
-
-    async def async_update(self) -> None:
-        """Update the entity state manually if needed."""
-        # Implement exponential backoff on repeated failures
-        if self._backoff_until is not None:
-            if dt_util.utcnow() < self._backoff_until:
-                _LOGGER.debug(
-                    "Skipping update due to backoff (until %s)",
-                    self._backoff_until,
-                )
-                return
-            # Backoff period expired, reset it
-            self._backoff_until = None
-
-        await self._async_fetch_initial_state()
+                # Request coordinator refresh after successful command
+                await self.coordinator.async_request_refresh()
