@@ -18,7 +18,7 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.util import dt_util
+import homeassistant.util.dt as dt_util
 
 from .const import DOMAIN
 from .micro_air_easytouch.const import UUIDS
