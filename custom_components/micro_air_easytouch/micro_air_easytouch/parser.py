@@ -19,8 +19,7 @@ from bluetooth_sensor_state_data import BluetoothData
 from home_assistant_bluetooth import BluetoothServiceInfo
 from sensor_state_data.enum import StrEnum
 
-from ..const import DOMAIN
-from .const import UUIDS
+from .const import DOMAIN, UUIDS
 
 _LOGGER = logging.getLogger(__name__)
 
