@@ -117,6 +117,7 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
         # Use simple naming without zone reference
         self._attr_unique_id = f"microaireasytouch_{mac_address}_climate"
         self._attr_name = "EasyTouch Climate"
+        self._last_hvac_mode: HVACMode = HVACMode.COOL
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"MicroAirEasyTouch_{mac_address}")},
@@ -177,6 +178,13 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
         """Return hvac operation mode."""
         mode_num = self.coordinator.data.get("mode_num", 0)
         return EASY_MODE_TO_HA_MODE.get(mode_num, HVACMode.OFF)
+
+    def _handle_coordinator_update(self) -> None:
+        """Handle coordinator update and track the last active HVAC mode."""
+        mode = self.hvac_mode
+        if mode != HVACMode.OFF:
+            self._last_hvac_mode = mode
+        super()._handle_coordinator_update()
 
     @property
     def hvac_action(self) -> HVACAction | None:
@@ -267,8 +275,8 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
                 await self.coordinator.async_request_refresh()
 
     async def async_turn_on(self) -> None:
-        """Turn the entity on."""
-        await self.async_set_hvac_mode(HVACMode.COOL)
+        """Turn the entity on, restoring the last active HVAC mode."""
+        await self.async_set_hvac_mode(self._last_hvac_mode)
 
     async def async_turn_off(self) -> None:
         """Turn the entity off."""
