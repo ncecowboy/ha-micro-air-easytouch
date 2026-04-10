@@ -49,3 +49,4 @@ FAN_MODES_FAN_ONLY = {
     "high": 2,  # manualH
 }
 FAN_MODES_REVERSE = {v: k for k, v in FAN_MODES_FULL.items()}
+FAN_MODES_FAN_ONLY_REVERSE = {v: k for k, v in FAN_MODES_FAN_ONLY.items()}

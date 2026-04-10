@@ -198,20 +198,22 @@ async def async_register_services(hass: HomeAssistant) -> None:
         except Exception as e:
             _LOGGER.error("Error querying device %s: %s", mac_address, str(e))
 
-    # Register the services
-    hass.services.async_register(
-        DOMAIN,
-        "set_location",
-        handle_set_location,
-        schema=SERVICE_SET_LOCATION_SCHEMA,
-    )
+    # Register each service only if not already registered
+    if not hass.services.has_service(DOMAIN, "set_location"):
+        hass.services.async_register(
+            DOMAIN,
+            "set_location",
+            handle_set_location,
+            schema=SERVICE_SET_LOCATION_SCHEMA,
+        )
 
-    hass.services.async_register(
-        DOMAIN,
-        "query_device",
-        handle_query_device,
-        schema=SERVICE_QUERY_DEVICE_SCHEMA,
-    )
+    if not hass.services.has_service(DOMAIN, "query_device"):
+        hass.services.async_register(
+            DOMAIN,
+            "query_device",
+            handle_query_device,
+            schema=SERVICE_QUERY_DEVICE_SCHEMA,
+        )
 
 
 async def async_unregister_services(hass: HomeAssistant) -> None:
