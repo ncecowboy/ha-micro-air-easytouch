@@ -15,14 +15,14 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .micro_air_easytouch.const import (
     EASY_MODE_TO_HA_MODE,
-    FAN_MODES_FAN_ONLY,
+    FAN_MODES_FAN_ONLY_REVERSE,
     FAN_MODES_REVERSE,
     HA_MODE_TO_EASY_MODE,
 )
@@ -55,6 +55,8 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.TARGET_TEMPERATURE_RANGE
         | ClimateEntityFeature.FAN_MODE
+        | ClimateEntityFeature.TURN_ON
+        | ClimateEntityFeature.TURN_OFF
     )
     _attr_temperature_unit = UnitOfTemperature.FAHRENHEIT
     _attr_hvac_modes = list(HA_MODE_TO_EASY_MODE.keys())
@@ -212,7 +214,7 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
         """Return the current fan mode as a standard Home Assistant name."""
         if self.hvac_mode == HVACMode.FAN_ONLY:
             fan_mode_num = self.coordinator.data.get("fan_mode_num", 0)
-            mode = FAN_MODES_FAN_ONLY.get(fan_mode_num, "off")
+            mode = FAN_MODES_FAN_ONLY_REVERSE.get(fan_mode_num, "off")
         elif self.hvac_mode == HVACMode.COOL:
             fan_mode_num = self.coordinator.data.get("cool_fan_mode_num", 128)
             mode = FAN_MODES_REVERSE.get(fan_mode_num, "full auto")
@@ -263,6 +265,14 @@ class MicroAirEasyTouchClimate(CoordinatorEntity, ClimateEntity):
             if await self._data.send_command(self.hass, ble_device, message):
                 # Request coordinator refresh after successful command
                 await self.coordinator.async_request_refresh()
+
+    async def async_turn_on(self) -> None:
+        """Turn the entity on."""
+        await self.async_set_hvac_mode(HVACMode.COOL)
+
+    async def async_turn_off(self) -> None:
+        """Turn the entity off."""
+        await self.async_set_hvac_mode(HVACMode.OFF)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set new target hvac mode."""

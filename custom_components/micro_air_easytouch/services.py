@@ -37,6 +37,8 @@ SERVICE_QUERY_DEVICE_SCHEMA = vol.Schema(
 
 async def async_register_services(hass: HomeAssistant) -> None:
     """Register services for the MicroAirEasyTouch integration."""
+    if hass.services.has_service(DOMAIN, "set_location"):
+        return
 
     async def handle_set_location(call: ServiceCall) -> None:
         """Handle the set_location service call."""

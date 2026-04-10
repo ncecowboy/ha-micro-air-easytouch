@@ -7,13 +7,10 @@ import time
 from datetime import timedelta
 from typing import Final
 
-from homeassistant.components.bluetooth import (
-    BluetoothServiceInfoBleak,
-    async_ble_device_from_address,
-)
+from homeassistant.components.bluetooth import async_ble_device_from_address
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -108,20 +105,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
     }
 
-    @callback
-    def _handle_bluetooth_update(
-        service_info: BluetoothServiceInfoBleak,
-    ) -> None:
-        """Update device info from advertisements."""
-        if service_info.address == address:
-            _LOGGER.debug(
-                "Received BLE advertisement from %s: %s", address, service_info
-            )
-            data._start_update(service_info)
-
-    hass.bus.async_listen("bluetooth_service_info", _handle_bluetooth_update)
-
-    # Register services
+    # Register services (only once, even with multiple devices)
     await async_register_services(hass)
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -134,6 +118,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry, PLATFORMS
     ):
         hass.data[DOMAIN].pop(entry.entry_id)
-        # Unregister services
-        await async_unregister_services(hass)
+        # Unregister services only when the last config entry is removed
+        if not hass.data[DOMAIN]:
+            await async_unregister_services(hass)
     return unload_ok

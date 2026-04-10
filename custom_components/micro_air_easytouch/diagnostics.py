@@ -38,7 +38,8 @@ async def async_get_config_entry_diagnostics(
     }
 
     # Try to get the current state from climate entity
-    for entity_id, state in hass.states.async_all():
+    for state in hass.states.async_all():
+        entity_id = state.entity_id
         if (
             entity_id.startswith("climate.")
             and entry.entry_id in entity_id
